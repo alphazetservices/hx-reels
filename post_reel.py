@@ -17,7 +17,7 @@ import time
 import urllib.parse
 import urllib.request
 
-API = "https://graph.instagram.com/v23.0"
+API = "https://graph.instagram.com/v25.0"
 MAX_LATE = dt.timedelta(hours=6)  # skip a Reel if the runner was down for longer than this
 
 
