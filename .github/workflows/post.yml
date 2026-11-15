@@ -1,0 +1,44 @@
+name: Post scheduled Reel
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Post this Reel number now (e.g. 001). Leave empty for normal schedule."
+        required: false
+        default: ""
+      dry_run:
+        description: "1 = only print, do not post"
+        required: false
+        default: "0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: post-reel
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Post due Reel
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          PAGES_BASE: https://alphazetservices.github.io/hx-reels
+          ONLY: ${{ github.event.inputs.only }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: python post_reel.py
+      - name: Save posted log
+        run: |
+          git config user.name "reel-bot"
+          git config user.email "reel-bot@users.noreply.github.com"
+          git add posted.json
+          git diff --cached --quiet || (git commit -m "Log posted Reel" && git push)
