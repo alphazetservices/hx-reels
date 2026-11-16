@@ -40,7 +40,10 @@ def call(method, path, _soft=False, **params):
         body = e.read().decode()[:500]
         if _soft:
             return {"error": body}
-        sys.exit(f"API error on {path}: {e.code} {body}")
+        print(f"API error on {path}: {e.code} {body}", flush=True)
+        if any(k in body for k in ("API access blocked", "request limit", "rate limit", "Error validating access token", "has expired", "session has been invalidated")):
+            sys.exit(3)  # account-level problem: stop, don't hammer Meta
+        sys.exit(1)
 
 
 def ig_user():
@@ -140,6 +143,9 @@ def make_container(uid, reel, raw_url):
     try:
         c = call("POST", f"{uid}/media", media_type="REELS", upload_type="resumable",
                  caption=reel["caption"], share_to_feed="true", _soft=True)
+        if c and "API access blocked" in str(c.get("error", "")):
+            print("Meta says API access blocked; stopping.", flush=True)
+            sys.exit(3)
         if c and c.get("id"):
             req = urllib.request.Request(
                 f"https://rupload.facebook.com/ig-api-upload/v25.0/{c['id']}", data=data, method="POST",

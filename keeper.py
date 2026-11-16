@@ -13,6 +13,7 @@ import time
 
 BUDGET = dt.timedelta(hours=5, minutes=30)  # GitHub jobs may run up to 6h
 start = dt.datetime.now(dt.timezone.utc)
+fails = 0
 
 
 def sh(*cmd):
@@ -28,7 +29,19 @@ def next_due():
 
 while True:
     sh("git", "pull", "-q", "--rebase")
-    subprocess.run([sys.executable, "post_reel.py"])
+    rc = subprocess.run([sys.executable, "post_reel.py"]).returncode
+    if rc == 3:
+        print("Account-level error from Meta. Stopping the chain; fix the account, then restart.", flush=True)
+        open(".done", "w").close()
+        break
+    if rc != 0:
+        fails += 1
+        if fails >= 3:
+            print("Same Reel failed 3 times; pausing 30 minutes.", flush=True)
+            time.sleep(1800)
+            fails = 0
+    else:
+        fails = 0
     sys.stdout.flush()
     sh("git", "add", "posted.json")
     if sh("git", "diff", "--cached", "--quiet").returncode != 0:
