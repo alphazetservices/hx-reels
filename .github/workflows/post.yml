@@ -40,7 +40,7 @@ jobs:
           ONLY: ${{ github.event.inputs.only }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           CHECK: ${{ github.event.inputs.check }}
-          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_USER_ID: "17841466382176159"
         run: python post_reel.py
       - name: Save posted log
         run: |
