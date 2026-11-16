@@ -18,8 +18,8 @@ import urllib.parse
 import urllib.request
 
 TOKEN = os.environ.get("IG_TOKEN", "").strip()
-# Instagram-login tokens start with "IG"; Facebook-login (Unified login) tokens start with "EAA".
-API = ("https://graph.facebook.com/v25.0" if TOKEN.startswith("EAA")
+# Instagram-login tokens start with "IG"; Facebook-login (Unified login) tokens start with "EA".
+API = ("https://graph.facebook.com/v25.0" if TOKEN.startswith("EA")
        else "https://graph.instagram.com/v25.0")
 MAX_LATE = dt.timedelta(hours=6)  # skip a Reel if the runner was down for longer than this
 
@@ -43,7 +43,7 @@ def ig_user():
     """Return (instagram user id, username) for the token."""
     if os.environ.get("IG_USER_ID"):
         return os.environ["IG_USER_ID"], "(from IG_USER_ID)"
-    if not TOKEN.startswith("EAA"):
+    if not TOKEN.startswith("EA"):
         me = call("GET", "me", fields="user_id,username")
         return me["user_id"], me.get("username")
     # Facebook-login token: find the Instagram business account it can manage.
