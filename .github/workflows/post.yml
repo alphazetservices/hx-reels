@@ -27,7 +27,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: post-reel
+  group: post-reel-v2
   cancel-in-progress: false
 
 jobs:
