@@ -28,7 +28,8 @@ def next_due():
 
 while True:
     sh("git", "pull", "-q", "--rebase")
-    r = subprocess.run([sys.executable, "post_reel.py"])
+    subprocess.run([sys.executable, "post_reel.py"])
+    sys.stdout.flush()
     sh("git", "add", "posted.json")
     if sh("git", "diff", "--cached", "--quiet").returncode != 0:
         sh("git", "commit", "-m", "Log posted Reel")
@@ -46,10 +47,7 @@ while True:
     if nxt <= now:
         time.sleep(60)  # still due (e.g. a failed attempt); retry shortly
         continue
-    if nxt > end:
-        print(f"Next Reel at {nxt}; waiting until {end} then handing over.")
-        time.sleep((end - now).total_seconds())
-        break
-    wait = (nxt - now).total_seconds() + 20
-    print(f"Sleeping {int(wait)}s until {nxt}")
-    time.sleep(wait)
+    # Sleep in short chunks so schedule edits pushed to the repo are picked up.
+    wait = min((nxt - now).total_seconds() + 20, (end - now).total_seconds(), 300)
+    print(f"Next Reel at {nxt}; checking again in {int(wait)}s", flush=True)
+    time.sleep(max(wait, 1))
