@@ -61,6 +61,7 @@ def ig_user():
 def main():
     if os.environ.get("CHECK") == "1":
         uid, name = ig_user()
+        name = call("GET", uid, fields="username").get("username", name)
         print(f"Token OK. Instagram account: {name} (id {uid}). API: {API}")
         return
     schedule = json.load(open("schedule.json", encoding="utf-8"))
