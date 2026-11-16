@@ -60,6 +60,14 @@ def ig_user():
 
 def main():
     if os.environ.get("CHECK") == "1":
+        print(f"Token received: starts with '{TOKEN[:4]}', length {len(TOKEN)}")
+        for host in ("https://graph.instagram.com/v25.0", "https://graph.facebook.com/v25.0"):
+            url = f"{host}/me?fields=id,username&access_token={urllib.parse.quote(TOKEN)}"
+            try:
+                with urllib.request.urlopen(url, timeout=30) as r:
+                    print(f"{host}: OK {r.read().decode()[:200]}")
+            except urllib.error.HTTPError as e:
+                print(f"{host}: {e.code} {e.read().decode()[:200]}")
         uid, name = ig_user()
         name = call("GET", uid, fields="username").get("username", name)
         print(f"Token OK. Instagram account: {name} (id {uid}). API: {API}")
