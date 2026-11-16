@@ -2,7 +2,7 @@ name: Post scheduled Reel
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/30 * * * *"   # backup only; the keeper chain below does the real timing
   workflow_dispatch:
     inputs:
       only:
@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: post-reel
@@ -28,23 +29,34 @@ concurrency:
 jobs:
   post:
     runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      IG_TOKEN: ${{ secrets.IG_TOKEN }}
+      PAGES_BASE: https://alphazetservices.github.io/hx-reels
+      IG_USER_ID: "17841466382176159"
+      ONLY: ${{ github.event.inputs.only }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+      CHECK: ${{ github.event.inputs.check }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Post due Reel
-        env:
-          IG_TOKEN: ${{ secrets.IG_TOKEN }}
-          PAGES_BASE: https://alphazetservices.github.io/hx-reels
-          ONLY: ${{ github.event.inputs.only }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
-          CHECK: ${{ github.event.inputs.check }}
-          IG_USER_ID: "17841466382176159"
-        run: python post_reel.py
-      - name: Save posted log
+      - name: Git identity
         run: |
           git config user.name "reel-bot"
           git config user.email "reel-bot@users.noreply.github.com"
+      - name: One-off run (check / dry run / specific Reel)
+        if: ${{ github.event.inputs.only != '' || github.event.inputs.check == '1' || github.event.inputs.dry_run == '1' }}
+        run: |
+          python post_reel.py
           git add posted.json
-          git diff --cached --quiet || (git commit -m "Log posted Reel" && git push)
+          git diff --cached --quiet || (git commit -m "Log posted Reel" && git pull -q --rebase && git push)
+      - name: Keep posting on schedule
+        if: ${{ github.event.inputs.only == '' && github.event.inputs.check != '1' && github.event.inputs.dry_run != '1' }}
+        run: python keeper.py
+      - name: Hand over to a fresh run
+        if: ${{ always() && github.event.inputs.only == '' && github.event.inputs.check != '1' && github.event.inputs.dry_run != '1' && hashFiles('.done') == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run post.yml --ref main
