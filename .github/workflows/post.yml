@@ -27,7 +27,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: post-reel-v3
+  group: ${{ (github.event.inputs.check == '1' || github.event.inputs.prep == '1' || github.event.inputs.dry_run == '1') && 'post-reel-oneoff' || 'post-reel-v3' }}
   cancel-in-progress: false
 
 jobs:

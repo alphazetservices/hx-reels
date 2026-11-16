@@ -75,6 +75,14 @@ def main():
                     print(f"{host}: OK {r.read().decode()[:200]}")
             except urllib.error.HTTPError as e:
                 print(f"{host}: {e.code} {e.read().decode()[:200]}")
+        try:
+            dbg = urllib.request.urlopen("https://graph.facebook.com/v25.0/debug_token?" + urllib.parse.urlencode(
+                {"input_token": TOKEN, "access_token": TOKEN}), timeout=30).read().decode()
+            d = json.loads(dbg).get("data", {})
+            fmt = lambda t: ("never" if not t else dt.datetime.fromtimestamp(t, dt.timezone(dt.timedelta(hours=5, minutes=30))).strftime("%d %b %Y %H:%M IST"))
+            print(f"TOKEN EXPIRES: {fmt(d.get('expires_at'))} | DATA ACCESS EXPIRES: {fmt(d.get('data_access_expires_at'))} | type: {d.get('type')} | valid: {d.get('is_valid')}", flush=True)
+        except Exception as e:
+            print("debug_token failed:", str(e)[:300], flush=True)
         uid, name = ig_user()
         name = call("GET", uid, fields="username").get("username", name)
         print(f"Token OK. Instagram account: {name} (id {uid}). API: {API}")
