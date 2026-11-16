@@ -17,12 +17,15 @@ import time
 import urllib.parse
 import urllib.request
 
-API = "https://graph.instagram.com/v25.0"
+TOKEN = os.environ.get("IG_TOKEN", "").strip()
+# Instagram-login tokens start with "IG"; Facebook-login (Unified login) tokens start with "EAA".
+API = ("https://graph.facebook.com/v25.0" if TOKEN.startswith("EAA")
+       else "https://graph.instagram.com/v25.0")
 MAX_LATE = dt.timedelta(hours=6)  # skip a Reel if the runner was down for longer than this
 
 
 def call(method, path, **params):
-    params["access_token"] = os.environ["IG_TOKEN"]
+    params["access_token"] = TOKEN
     data = urllib.parse.urlencode(params).encode()
     url = f"{API}/{path}"
     if method == "GET":
@@ -36,7 +39,30 @@ def call(method, path, **params):
         sys.exit(f"API error on {path}: {e.code} {e.read().decode()[:500]}")
 
 
+def ig_user():
+    """Return (instagram user id, username) for the token."""
+    if os.environ.get("IG_USER_ID"):
+        return os.environ["IG_USER_ID"], "(from IG_USER_ID)"
+    if not TOKEN.startswith("EAA"):
+        me = call("GET", "me", fields="user_id,username")
+        return me["user_id"], me.get("username")
+    # Facebook-login token: find the Instagram business account it can manage.
+    pages = call("GET", "me/accounts", fields="instagram_business_account{id,username}")
+    for p in pages.get("data", []):
+        iba = p.get("instagram_business_account")
+        if iba:
+            return iba["id"], iba.get("username")
+    me = call("GET", "me", fields="instagram_business_account{id,username}")
+    if me.get("instagram_business_account"):
+        return me["instagram_business_account"]["id"], me["instagram_business_account"].get("username")
+    sys.exit("Token works but no Instagram account found. Set IG_USER_ID.")
+
+
 def main():
+    if os.environ.get("CHECK") == "1":
+        uid, name = ig_user()
+        print(f"Token OK. Instagram account: {name} (id {uid}). API: {API}")
+        return
     schedule = json.load(open("schedule.json", encoding="utf-8"))
     posted = json.load(open("posted.json", encoding="utf-8"))
     now = dt.datetime.now(dt.timezone.utc)
@@ -65,9 +91,8 @@ def main():
         print(reel["caption"])
         return
 
-    me = call("GET", "me", fields="user_id,username")
-    uid = me["user_id"]
-    print("Account:", me.get("username"))
+    uid, name = ig_user()
+    print("Account:", name)
 
     container = call("POST", f"{uid}/media", media_type="REELS",
                      video_url=video_url, caption=reel["caption"], share_to_feed="true")

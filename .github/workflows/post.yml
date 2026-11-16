@@ -13,6 +13,10 @@ on:
         description: "1 = only print, do not post"
         required: false
         default: "0"
+      check:
+        description: "1 = only test the token, do not post"
+        required: false
+        default: "0"
 
 permissions:
   contents: write
@@ -35,6 +39,8 @@ jobs:
           PAGES_BASE: https://alphazetservices.github.io/hx-reels
           ONLY: ${{ github.event.inputs.only }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
+          CHECK: ${{ github.event.inputs.check }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: python post_reel.py
       - name: Save posted log
         run: |
