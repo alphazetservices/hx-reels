@@ -21,10 +21,11 @@ TOKEN = os.environ.get("IG_TOKEN", "").strip()
 # Instagram-login tokens start with "IG"; Facebook-login (Unified login) tokens start with "EA".
 API = ("https://graph.facebook.com/v25.0" if TOKEN.startswith("EA")
        else "https://graph.instagram.com/v25.0")
-MAX_LATE = dt.timedelta(hours=6)  # skip a Reel if the runner was down for longer than this
+RAW_BASE = "https://raw.githubusercontent.com/alphazetservices/hx-reels/main"
+MAX_LATE = dt.timedelta(hours=3)  # skip a Reel if the runner was down for longer than this
 
 
-def call(method, path, **params):
+def call(method, path, _soft=False, **params):
     params["access_token"] = TOKEN
     data = urllib.parse.urlencode(params).encode()
     url = f"{API}/{path}"
@@ -36,7 +37,10 @@ def call(method, path, **params):
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
-        sys.exit(f"API error on {path}: {e.code} {e.read().decode()[:500]}")
+        body = e.read().decode()[:500]
+        if _soft:
+            return {"error": body}
+        sys.exit(f"API error on {path}: {e.code} {body}")
 
 
 def ig_user():
@@ -78,7 +82,7 @@ def main():
     only = os.environ.get("ONLY", "").strip()
 
     if only:
-        due = [r for r in schedule if r["n"] == only.zfill(3)]
+        due = [r for r in schedule if r["n"] in (only, only.zfill(3))]
     else:
         due = [r for r in schedule
                if r["n"] not in posted
@@ -87,6 +91,9 @@ def main():
         print("Nothing due.")
         return
     reel = due[0]
+    if reel["n"] in posted and posted[reel["n"]].get("status") == "posted" and os.environ.get("PREP_ONLY") != "1":
+        print(f"Reel {reel['n']} was already posted; not posting twice.")
+        return
     late = now - dt.datetime.fromisoformat(reel["post_at"])
     if not only and late > MAX_LATE:
         print(f"Reel {reel['n']} is {late} late; marking skipped.")
@@ -94,19 +101,16 @@ def main():
         json.dump(posted, open("posted.json", "w", encoding="utf-8"), indent=1)
         return
 
-    video_url = f"{os.environ['PAGES_BASE'].rstrip('/')}/{reel['file']}"
-    print(f"Posting Reel {reel['n']} ({reel['source']}) from {video_url}")
+    raw_url = f"{RAW_BASE}/{reel['file']}"
+    print(f"Posting Reel {reel['n']} ({reel['source']})", flush=True)
     if os.environ.get("DRY_RUN") == "1":
         print(reel["caption"])
         return
 
     uid, name = ig_user()
-    print("Account:", name)
-
-    container = call("POST", f"{uid}/media", media_type="REELS",
-                     video_url=video_url, caption=reel["caption"], share_to_feed="true")
-    cid = container["id"]
-    for _ in range(60):  # wait up to ~10 minutes for Instagram to process the video
+    print("Account:", name, flush=True)
+    cid = make_container(uid, reel, raw_url)
+    for _ in range(90):  # wait up to ~15 minutes for Instagram to process the video
         st = call("GET", cid, fields="status_code,status")
         if st.get("status_code") == "FINISHED":
             break
@@ -115,11 +119,37 @@ def main():
         time.sleep(10)
     else:
         sys.exit("Timed out waiting for video processing.")
+    if os.environ.get("PREP_ONLY") == "1":
+        print(f"PREP OK: container {cid} processed; not published (test mode).")
+        return
 
     pub = call("POST", f"{uid}/media_publish", creation_id=cid)
     posted[reel["n"]] = {"status": "posted", "media_id": pub.get("id"), "at": now.isoformat()}
     json.dump(posted, open("posted.json", "w", encoding="utf-8"), indent=1)
-    print("Published media id", pub.get("id"))
+    print("Published media id", pub.get("id"), flush=True)
+
+
+def make_container(uid, reel, raw_url):
+    """Upload the video bytes straight to Instagram (resumable upload).
+    Falls back to letting Instagram fetch the public URL if that fails."""
+    data = urllib.request.urlopen(raw_url, timeout=120).read()
+    print(f"Downloaded {len(data)/1e6:.1f} MB", flush=True)
+    try:
+        c = call("POST", f"{uid}/media", media_type="REELS", upload_type="resumable",
+                 caption=reel["caption"], share_to_feed="true", _soft=True)
+        if c and c.get("id"):
+            req = urllib.request.Request(
+                f"https://rupload.facebook.com/ig-api-upload/v25.0/{c['id']}", data=data, method="POST",
+                headers={"Authorization": f"OAuth {TOKEN}", "offset": "0", "file_size": str(len(data))})
+            with urllib.request.urlopen(req, timeout=300) as r:
+                print("Upload:", r.read().decode()[:200], flush=True)
+            return c["id"]
+        print("Resumable container failed:", c, flush=True)
+    except Exception as e:
+        print("Resumable upload failed, falling back to URL:", str(e)[:300], flush=True)
+    c = call("POST", f"{uid}/media", media_type="REELS", video_url=raw_url,
+             caption=reel["caption"], share_to_feed="true")
+    return c["id"]
 
 
 if __name__ == "__main__":

@@ -17,6 +17,10 @@ on:
         description: "1 = only test the token, do not post"
         required: false
         default: "0"
+      prep:
+        description: "1 = upload + process the Reel but do NOT publish (test)"
+        required: false
+        default: "0"
 
 permissions:
   contents: write
@@ -37,8 +41,17 @@ jobs:
       ONLY: ${{ github.event.inputs.only }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
       CHECK: ${{ github.event.inputs.check }}
+      PREP_ONLY: ${{ github.event.inputs.prep }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            post_reel.py
+            keeper.py
+            schedule.json
+            posted.json
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -47,16 +60,16 @@ jobs:
           git config user.name "reel-bot"
           git config user.email "reel-bot@users.noreply.github.com"
       - name: One-off run (check / dry run / specific Reel)
-        if: ${{ github.event.inputs.only != '' || github.event.inputs.check == '1' || github.event.inputs.dry_run == '1' }}
+        if: ${{ github.event.inputs.only != '' || github.event.inputs.check == '1' || github.event.inputs.prep == '1' || github.event.inputs.dry_run == '1' }}
         run: |
           python post_reel.py
           git add posted.json
           git diff --cached --quiet || (git commit -m "Log posted Reel" && git pull -q --rebase && git push)
       - name: Keep posting on schedule
-        if: ${{ github.event.inputs.only == '' && github.event.inputs.check != '1' && github.event.inputs.dry_run != '1' }}
+        if: ${{ github.event.inputs.only == '' && github.event.inputs.check != '1' && github.event.inputs.dry_run != '1' && github.event.inputs.prep != '1' }}
         run: python keeper.py
       - name: Hand over to a fresh run
-        if: ${{ always() && github.event.inputs.only == '' && github.event.inputs.check != '1' && github.event.inputs.dry_run != '1' && hashFiles('.done') == '' }}
+        if: ${{ always() && github.event.inputs.only == '' && github.event.inputs.check != '1' && github.event.inputs.dry_run != '1' && github.event.inputs.prep != '1' && hashFiles('.done') == '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run post.yml --ref main
