@@ -101,6 +101,9 @@ def main():
         json.dump(posted, open("posted.json", "w", encoding="utf-8"), indent=1)
         return
 
+    if not reel.get("caption"):
+        print(f"Reel {reel['n']} has no approved caption yet; holding it.")
+        return
     raw_url = f"{RAW_BASE}/{reel['file']}"
     print(f"Posting Reel {reel['n']} ({reel['source']})", flush=True)
     if os.environ.get("DRY_RUN") == "1":
