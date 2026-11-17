@@ -41,6 +41,7 @@ jobs:
             keeper_yt.py
             yt_schedule.json
             yt_posted.json
+            yt_on
           sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
@@ -56,10 +57,10 @@ jobs:
           git add yt_posted.json
           git diff --cached --quiet || (git commit -m "Log posted Short" && git pull -q --rebase && git push)
       - name: Keep posting on schedule
-        if: ${{ github.event.inputs.only == '' && github.event.inputs.check != '1' && vars.SHORTS_ON == '1' }}
+        if: ${{ github.event.inputs.only == '' && github.event.inputs.check != '1' && hashFiles('yt_on') != '' }}
         run: python keeper_yt.py
       - name: Hand over to a fresh run
-        if: ${{ always() && github.event.inputs.only == '' && github.event.inputs.check != '1' && vars.SHORTS_ON == '1' && hashFiles('.yt_done') == '' }}
+        if: ${{ always() && github.event.inputs.only == '' && github.event.inputs.check != '1' && hashFiles('yt_on') != '' && hashFiles('.yt_done') == '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run shorts.yml --ref main
