@@ -83,7 +83,13 @@ def main():
         tok = token()
         st, _, b = req("https://www.googleapis.com/youtube/v3/channels?part=snippet,status&mine=true",
                        headers={"Authorization": f"Bearer {tok}"})
-        print("Channel:", st, b[:600].decode(errors="replace")); print("Login OK"); return
+        print("Channel:", st, b[:600].decode(errors="replace")); print("Login OK")
+        ids = ",".join(v["id"] for v in list(posted.values())[-5:])
+        if ids:
+            st, _, b = req(f"https://www.googleapis.com/youtube/v3/videos?part=status,processingDetails&id={ids}",
+                           headers={"Authorization": f"Bearer {tok}"})
+            print("Recent videos:", b[:1500].decode(errors="replace"))
+        return
     only = os.environ.get("ONLY", "").strip()
     now = dt.datetime.now(dt.timezone.utc)
     if only:
