@@ -1,0 +1,65 @@
+name: Post scheduled Shorts
+
+on:
+  schedule:
+    - cron: "15,45 * * * *"   # backup only; keeper chain does the timing
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Upload this Short number now (e.g. 001)"
+        required: false
+        default: ""
+      check:
+        description: "1 = only test YouTube login"
+        required: false
+        default: "0"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: ${{ (github.event.inputs.check == '1' || github.event.inputs.only != '') && 'shorts-oneoff' || 'shorts-v1' }}
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      ONLY: ${{ github.event.inputs.only }}
+      CHECK: ${{ github.event.inputs.check }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            post_short.py
+            keeper_yt.py
+            yt_schedule.json
+            yt_posted.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Git identity
+        run: |
+          git config user.name "shorts-bot"
+          git config user.email "shorts-bot@users.noreply.github.com"
+      - name: One-off run
+        if: ${{ github.event.inputs.only != '' || github.event.inputs.check == '1' }}
+        run: |
+          python post_short.py
+          git add yt_posted.json
+          git diff --cached --quiet || (git commit -m "Log posted Short" && git pull -q --rebase && git push)
+      - name: Keep posting on schedule
+        if: ${{ github.event.inputs.only == '' && github.event.inputs.check != '1' && vars.SHORTS_ON == '1' }}
+        run: python keeper_yt.py
+      - name: Hand over to a fresh run
+        if: ${{ always() && github.event.inputs.only == '' && github.event.inputs.check != '1' && vars.SHORTS_ON == '1' && hashFiles('.yt_done') == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run shorts.yml --ref main
